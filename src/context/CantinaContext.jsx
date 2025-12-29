@@ -17,8 +17,12 @@ export const CantinaProvider = ({ children }) => {
     });
 
     const [transactions, setTransactions] = useState(() => {
-        // Global transaction log (redundant maybe if inside students, but good for dashboard)
         const saved = localStorage.getItem('cantina_transactions');
+        return saved ? JSON.parse(saved) : [];
+    });
+
+    const [products, setProducts] = useState(() => {
+        const saved = localStorage.getItem('cantina_products');
         return saved ? JSON.parse(saved) : [];
     });
 
@@ -29,6 +33,10 @@ export const CantinaProvider = ({ children }) => {
     useEffect(() => {
         localStorage.setItem('cantina_transactions', JSON.stringify(transactions));
     }, [transactions]);
+
+    useEffect(() => {
+        localStorage.setItem('cantina_products', JSON.stringify(products));
+    }, [products]);
 
     const addStudent = (name) => {
         const newStudent = {
@@ -63,14 +71,49 @@ export const CantinaProvider = ({ children }) => {
         return true;
     };
 
-    const registerPurchase = (studentId, amount, description = 'Compra') => {
+    const addProduct = ({ name, price, supplier, initialStock = 0 }) => {
+        const newProduct = {
+            id: crypto.randomUUID(),
+            name,
+            price: parseFloat(price),
+            supplier,
+            stock: parseInt(initialStock),
+            createdAt: new Date().toISOString()
+        };
+        setProducts(prev => [...prev, newProduct]);
+        return newProduct;
+    };
+
+    const restockProduct = (productId, quantity) => {
+        const amount = parseInt(quantity);
+        if (isNaN(amount) || amount <= 0) return false;
+
+        setProducts(prev => prev.map(p => {
+            if (p.id === productId) {
+                return { ...p, stock: p.stock + amount };
+            }
+            return p;
+        }));
+        return true;
+    };
+
+    const registerPurchase = (studentId, amount, description = 'Compra', items = []) => {
         const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) return false;
+        if (isNaN(numAmount) || numAmount <= 0) return { success: false, error: 'Valor inválido' };
+
+        // Check if all items are in stock if items are provided
+        if (items.length > 0) {
+            const hasStock = items.every(item => {
+                const product = products.find(p => p.id === item.productId);
+                return product && product.stock >= item.quantity;
+            });
+            if (!hasStock) return { success: false, error: 'Estoque insuficiente para um ou mais itens' };
+        }
 
         let success = false;
         setStudents(prev => prev.map(s => {
             if (s.id === studentId) {
-                if (s.balance < numAmount) return s; // Check balance? Or allow negative? strictly check for now.
+                if (s.balance < numAmount) return s;
                 success = true;
                 return { ...s, balance: s.balance - numAmount };
             }
@@ -78,27 +121,43 @@ export const CantinaProvider = ({ children }) => {
         }));
 
         if (success) {
+            // Deduct stock
+            if (items.length > 0) {
+                setProducts(prev => prev.map(p => {
+                    const item = items.find(i => i.productId === p.id);
+                    if (item) {
+                        return { ...p, stock: p.stock - item.quantity };
+                    }
+                    return p;
+                }));
+            }
+
             const transaction = {
                 id: crypto.randomUUID(),
                 studentId,
                 type: 'PURCHASE',
                 amount: numAmount,
                 description,
+                items, // Save items in transaction
                 date: new Date().toISOString()
             };
             setTransactions(prev => [transaction, ...prev]);
+            return { success: true };
         }
 
-        return success;
+        return { success: false, error: 'Saldo insuficiente' };
     };
 
     return (
         <CantinaContext.Provider value={{
             students,
             transactions,
+            products,
             addStudent,
             addFunds,
-            registerPurchase
+            registerPurchase,
+            addProduct,
+            restockProduct
         }}>
             {children}
         </CantinaContext.Provider>
