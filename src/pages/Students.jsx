@@ -4,21 +4,52 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Modal from '../components/UI/Modal';
 import Input from '../components/UI/Input';
-import { Plus, User, DollarSign } from 'lucide-react';
+import { Plus, User, Edit, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Students = () => {
-    const { students, addStudent } = useCantina();
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newStudentName, setNewStudentName] = useState('');
+    const { students, addStudent, updateStudent, deleteStudent } = useCantina();
     const navigate = useNavigate();
+
+    // Add Modal State
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [newStudentName, setNewStudentName] = useState('');
+
+    // Edit Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [editName, setEditName] = useState('');
 
     const handleAddStudent = (e) => {
         e.preventDefault();
         if (newStudentName.trim()) {
             addStudent(newStudentName);
             setNewStudentName('');
-            setIsModalOpen(false);
+            setIsAddModalOpen(false);
+        }
+    };
+
+    const openEdit = (e, student) => {
+        e.stopPropagation(); // Prevent navigating to details
+        setEditingStudent(student);
+        setEditName(student.name);
+        setIsEditModalOpen(true);
+    };
+
+    const handleEditStudent = (e) => {
+        e.preventDefault();
+        if (editingStudent && editName.trim()) {
+            updateStudent(editingStudent.id, { name: editName });
+            setIsEditModalOpen(false);
+            setEditingStudent(null);
+        }
+    };
+
+    const handleDeleteStudent = () => {
+        if (editingStudent && window.confirm(`Tem certeza que deseja excluir o aluno ${editingStudent.name}?`)) {
+            deleteStudent(editingStudent.id);
+            setIsEditModalOpen(false);
+            setEditingStudent(null);
         }
     };
 
@@ -26,7 +57,7 @@ const Students = () => {
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <h2 className="text-gradient-primary" style={{ fontSize: '2rem' }}>Alunos</h2>
-                <Button onClick={() => setIsModalOpen(true)}>
+                <Button onClick={() => setIsAddModalOpen(true)}>
                     <Plus size={18} style={{ marginRight: '0.5rem' }} />
                     Novo Aluno
                 </Button>
@@ -34,7 +65,24 @@ const Students = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
                 {students.map(student => (
-                    <Card key={student.id} className="student-card" onClick={() => navigate(`/students/${student.id}`)} style={{ cursor: 'pointer' }}>
+                    <Card key={student.id} className="student-card" onClick={() => navigate(`/students/${student.id}`)} style={{ cursor: 'pointer', position: 'relative' }}>
+
+                        {/* Edit Button overlay */}
+                        <button
+                            onClick={(e) => openEdit(e, student)}
+                            style={{
+                                position: 'absolute', top: '10px', right: '10px',
+                                background: 'rgba(255, 255, 255, 0.1)', border: 'none',
+                                borderRadius: '50%', width: '32px', height: '32px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', color: 'var(--text-muted)',
+                                zIndex: 10
+                            }}
+                            title="Editar Aluno"
+                        >
+                            <Edit size={16} />
+                        </button>
+
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
                             <div style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }}>
                                 <User size={24} className="text-gradient-primary" />
@@ -60,7 +108,8 @@ const Students = () => {
                 )}
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Adicionar Aluno">
+            {/* Add Student Modal */}
+            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Adicionar Aluno">
                 <form onSubmit={handleAddStudent}>
                     <Input
                         label="Nome do Aluno"
@@ -70,8 +119,30 @@ const Students = () => {
                         autoFocus
                     />
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
-                        <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                        <Button variant="ghost" type="button" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
                         <Button type="submit">Cadastrar</Button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Edit Student Modal */}
+            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Editar Aluno">
+                <form onSubmit={handleEditStudent}>
+                    <Input
+                        label="Nome do Aluno"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        autoFocus
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem' }}>
+                        <Button type="button" variant="ghost" style={{ color: '#ef4444' }} onClick={handleDeleteStudent}>
+                            <Trash2 size={16} style={{ marginRight: '0.5rem' }} />
+                            Excluir
+                        </Button>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <Button variant="ghost" type="button" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+                            <Button type="submit">Salvar</Button>
+                        </div>
                     </div>
                 </form>
             </Modal>

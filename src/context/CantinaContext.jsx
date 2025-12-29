@@ -71,12 +71,14 @@ export const CantinaProvider = ({ children }) => {
         return true;
     };
 
-    const addProduct = ({ name, price, supplier, initialStock = 0 }) => {
+    const addProduct = ({ name, price, costPrice, supplier, category, initialStock = 0 }) => {
         const newProduct = {
             id: crypto.randomUUID(),
             name,
             price: parseFloat(price),
+            costPrice: parseFloat(costPrice) || 0,
             supplier,
+            category: category || 'Outros',
             stock: parseInt(initialStock),
             createdAt: new Date().toISOString()
         };
@@ -95,6 +97,20 @@ export const CantinaProvider = ({ children }) => {
             return p;
         }));
         return true;
+    };
+
+    const bulkRestockProducts = (items) => {
+        // items: [{ id, quantity }]
+        setProducts(prev => prev.map(p => {
+            const item = items.find(i => i.id === p.id);
+            if (item) {
+                const amount = parseInt(item.quantity);
+                if (!isNaN(amount) && amount > 0) {
+                    return { ...p, stock: p.stock + amount };
+                }
+            }
+            return p;
+        }));
     };
 
     const registerPurchase = (studentId, amount, description = 'Compra', items = []) => {
@@ -148,6 +164,29 @@ export const CantinaProvider = ({ children }) => {
         return { success: false, error: 'Saldo insuficiente' };
     };
 
+    const updateStudent = (id, data) => {
+        setStudents(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    };
+
+    const deleteStudent = (id) => {
+        setStudents(prev => prev.filter(s => s.id !== id));
+        // You might want to keep transactions or delete them. For now, we keep them.
+    };
+
+    const updateProduct = (id, data) => {
+        setProducts(prev => prev.map(p => p.id === id ? {
+            ...p,
+            ...data,
+            price: parseFloat(data.price),
+            costPrice: parseFloat(data.costPrice) || p.costPrice || 0,
+            stock: parseInt(data.stock)
+        } : p));
+    };
+
+    const deleteProduct = (id) => {
+        setProducts(prev => prev.filter(p => p.id !== id));
+    };
+
     return (
         <CantinaContext.Provider value={{
             students,
@@ -157,7 +196,12 @@ export const CantinaProvider = ({ children }) => {
             addFunds,
             registerPurchase,
             addProduct,
-            restockProduct
+            restockProduct,
+            bulkRestockProducts,
+            updateStudent,
+            deleteStudent,
+            updateProduct,
+            deleteProduct
         }}>
             {children}
         </CantinaContext.Provider>
