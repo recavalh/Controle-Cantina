@@ -1,0 +1,5 @@
+.glass-card {
+    padding: 1.5rem;
+    /* Base styles are inherited from global glass-card utility, 
+     but we can add specific card overrides here if needed */
+}

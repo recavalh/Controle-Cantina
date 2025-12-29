@@ -1,0 +1,35 @@
+/* Font Import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;700&display=swap');
+
+:root {
+    /* Colors - Base */
+    --bg-dark: #0f172a;
+    /* Slate 900 */
+    --bg-darker: #020617;
+    /* Slate 950 */
+
+    /* Colors - Primary (Gradients) */
+    --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    /* Indigo to Purple */
+    --secondary-gradient: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+    /* Pink to Rose */
+
+    /* Colors - Text */
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+
+    /* Glassmorphism */
+    --glass-bg: rgba(30, 41, 59, 0.4);
+    --glass-border: rgba(148, 163, 184, 0.1);
+    --glass-highlight: rgba(148, 163, 184, 0.05);
+    --backdrop-blur: 12px;
+
+    /* Spacing & Layout */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+
+    /* Typography */
+    --font-heading: 'Outfit', sans-serif;
+    --font-body: 'Inter', sans-serif;
+}
