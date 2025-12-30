@@ -8,10 +8,11 @@ import { Plus, User, Edit, Trash2, Power, EyeOff, Archive, Undo2 } from 'lucide-
 import { useNavigate } from 'react-router-dom';
 
 const Students = () => {
-    const { students, addStudent, updateStudent, deleteStudent, toggleStudentStatus } = useCantina();
+    const { students, addStudent, updateStudent, deleteStudent, toggleStudentStatus, currentUser } = useCantina();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [newStudentName, setNewStudentName] = useState('');
+    const [newStudentSchool, setNewStudentSchool] = useState('Wizard');
     const [searchTerm, setSearchTerm] = useState('');
 
     // View State
@@ -20,12 +21,28 @@ const Students = () => {
     // Edit State
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [editStudentName, setEditStudentName] = useState('');
+    const [editStudentSchool, setEditStudentSchool] = useState('Wizard');
 
     const navigate = useNavigate();
+
+    // Init School based on Role
+    React.useEffect(() => {
+        if (currentUser?.role === 'wizard') {
+            setNewStudentSchool('Wizard');
+        } else if (currentUser?.role === 'wizkids') {
+            setNewStudentSchool('WizKids');
+        }
+    }, [currentUser]);
+
 
     // Filter Logic
     const filteredStudents = students
         .filter(student => {
+            // Role Filter
+            if (currentUser?.role !== 'admin') {
+                const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+                if ((student.school || 'Wizard') !== userSchool) return false;
+            }
             // Filter by Active/Inactive status
             const isActive = student.active !== false; // Default to true if undefined
             if (showInactive) return !isActive;
@@ -42,8 +59,10 @@ const Students = () => {
     const handleAddStudent = (e) => {
         e.preventDefault();
         if (newStudentName.trim()) {
-            addStudent(newStudentName);
+            addStudent(newStudentName, newStudentSchool);
             setNewStudentName('');
+            // Reset school to default only if admin, else keep user's school
+            if (currentUser?.role === 'admin') setNewStudentSchool('Wizard');
             setIsModalOpen(false);
         }
     };
@@ -56,13 +75,14 @@ const Students = () => {
         e.stopPropagation(); // Prevent navigating to details
         setSelectedStudent(student);
         setEditStudentName(student.name);
+        setEditStudentSchool(student.school || 'Wizard');
         setIsEditModalOpen(true);
     };
 
     const handleEditStudent = (e) => {
         e.preventDefault();
         if (selectedStudent && editStudentName.trim()) {
-            updateStudent(selectedStudent.id, { name: editStudentName });
+            updateStudent(selectedStudent.id, { name: editStudentName, school: editStudentSchool });
             setIsEditModalOpen(false);
             setSelectedStudent(null);
         }
@@ -91,7 +111,7 @@ const Students = () => {
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <h2 className="text-gradient-primary" style={{ margin: 0 }}>
-                    {showInactive ? 'Alunos Inativos' : 'Alunos'}
+                    {showInactive ? 'Alunos Inativos' : 'Alunos'} {currentUser?.role !== 'admin' && `(${currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard'})`}
                 </h2>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <Button variant={showInactive ? 'primary' : 'secondary'} onClick={() => setShowInactive(!showInactive)}>
@@ -155,14 +175,26 @@ const Students = () => {
                                 R$ {student.balance.toFixed(2)}
                             </span>
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', marginBottom: '0.25rem', color: student.active === false ? 'var(--text-muted)' : 'var(--text-main)' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', marginBottom: '0.25rem', color: student.active === false ? 'var(--text-muted)' : 'var(--text-main)', display: 'flex', justifyContent: 'space-between' }}>
                             {student.name}
                         </h3>
-                        {student.active === false && (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--glass-border)', padding: '2px 6px', borderRadius: '4px' }}>
-                                INATIVO
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                            <span style={{
+                                fontSize: '0.7rem',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: (student.school || 'Wizard') === 'Wizard' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                color: (student.school || 'Wizard') === 'Wizard' ? '#fca5a5' : '#93c5fd',
+                                border: `1px solid ${(student.school || 'Wizard') === 'Wizard' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`
+                            }}>
+                                {student.school || 'Wizard'}
                             </span>
-                        )}
+                            {student.active === false && (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', border: '1px solid var(--glass-border)', padding: '2px 6px', borderRadius: '4px' }}>
+                                    INATIVO
+                                </span>
+                            )}
+                        </div>
 
                         <Button
                             variant="ghost"
@@ -183,12 +215,12 @@ const Students = () => {
 
                 {sortedStudents.length === 0 && (
                     <p style={{ color: 'var(--text-muted)', gridColumn: '1/-1', textAlign: 'center' }}>
-                        {showInactive ? 'Nenhum aluno inativo encontrado.' : 'Nenhum aluno cadastrado.'}
+                        {showInactive ? 'Nenhum aluno inativo encontrado.' : 'Nenhum aluno cadastrado para esta escola.'}
                     </p>
                 )}
             </div>
 
-            {/* Add Student Modal (Only for active view essentially) */}
+            {/* Add Student Modal */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Aluno">
                 <form onSubmit={handleAddStudent}>
                     <Input
@@ -198,6 +230,31 @@ const Students = () => {
                         onChange={(e) => setNewStudentName(e.target.value)}
                         autoFocus
                     />
+
+                    {currentUser?.role === 'admin' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Escola</label>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <Button
+                                    type="button"
+                                    variant={newStudentSchool === 'Wizard' ? 'secondary' : 'outline'}
+                                    onClick={() => setNewStudentSchool('Wizard')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: newStudentSchool === 'Wizard' ? '#ef4444' : undefined, color: newStudentSchool === 'Wizard' ? '#fca5a5' : undefined }}
+                                >
+                                    Wizard
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={newStudentSchool === 'WizKids' ? 'secondary' : 'outline'}
+                                    onClick={() => setNewStudentSchool('WizKids')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: newStudentSchool === 'WizKids' ? '#3b82f6' : undefined, color: newStudentSchool === 'WizKids' ? '#93c5fd' : undefined }}
+                                >
+                                    WizKids
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                         <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
                         <Button type="submit">Cadastrar</Button>
@@ -212,9 +269,32 @@ const Students = () => {
                         label="Nome do Aluno"
                         value={editStudentName}
                         onChange={(e) => setEditStudentName(e.target.value)}
-                        // Disable editing name if inactive? Generally better to allow it.
                         autoFocus
                     />
+
+                    {currentUser?.role === 'admin' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Escola</label>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <Button
+                                    type="button"
+                                    variant={editStudentSchool === 'Wizard' ? 'secondary' : 'outline'}
+                                    onClick={() => setEditStudentSchool('Wizard')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: editStudentSchool === 'Wizard' ? '#ef4444' : undefined, color: editStudentSchool === 'Wizard' ? '#fca5a5' : undefined }}
+                                >
+                                    Wizard
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={editStudentSchool === 'WizKids' ? 'secondary' : 'outline'}
+                                    onClick={() => setEditStudentSchool('WizKids')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: editStudentSchool === 'WizKids' ? '#3b82f6' : undefined, color: editStudentSchool === 'WizKids' ? '#93c5fd' : undefined }}
+                                >
+                                    WizKids
+                                </Button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Status Toggle Button */}
                     <div style={{ marginBottom: '2rem' }}>

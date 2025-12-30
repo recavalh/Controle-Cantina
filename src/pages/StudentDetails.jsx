@@ -10,7 +10,7 @@ import { ArrowLeft, Wallet, ShoppingCart, History, TrendingUp, TrendingDown, Plu
 const StudentDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { students, transactions, products, addFunds, registerPurchase, deleteTransaction, updateTransaction } = useCantina();
+    const { students, transactions, products, addFunds, registerPurchase, deleteTransaction, updateTransaction, currentUser } = useCantina();
 
     const student = students.find(s => s.id === id);
     const studentTransactions = transactions.filter(t => t.studentId === id).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -20,7 +20,8 @@ const StudentDetails = () => {
 
     // Deposit State
     const [amount, setAmount] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('DINHEIRO'); // 'DINHEIRO', 'CARTAO', 'PIX'
+    const [paymentMethod, setPaymentMethod] = useState('DINHEIRO'); // 'DINHEIRO', 'CARTAO', 'PIX' (For Deposits)
+    const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('CREDITO'); // For Purchases
 
     // Purchase State
     const [purchaseMode, setPurchaseMode] = useState('products'); // 'products' or 'manual'
@@ -36,6 +37,20 @@ const StudentDetails = () => {
 
     if (!student) {
         return <div style={{ textAlign: 'center', marginTop: '4rem' }}>Aluno não encontrado</div>;
+    }
+
+    // Access Control Check
+    if (currentUser?.role !== 'admin') {
+        const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+        if ((student.school || 'Wizard') !== userSchool) {
+            return (
+                <div style={{ textAlign: 'center', marginTop: '4rem' }}>
+                    <h2 style={{ color: '#ef4444' }}>Acesso Negado</h2>
+                    <p>Este aluno pertence à escola {student.school || 'Wizard'}.</p>
+                    <Button onClick={() => navigate('/')}>Voltar ao Painel</Button>
+                </div>
+            );
+        }
     }
 
     const handleDeposit = (e) => {
@@ -69,8 +84,18 @@ const StudentDetails = () => {
     };
 
     const cartTotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+    // Filter Products by Category AND School
     const filteredProducts = products
         .filter(p => !selectedCategory || (p.category || 'Outros') === selectedCategory) // Filter by category
+        .filter(p => {
+            // Role Filter
+            if (currentUser?.role !== 'admin') {
+                const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+                if ((p.school || 'Wizard') !== userSchool) return false;
+            }
+            return true;
+        })
         .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const handlePurchase = (e) => {
@@ -90,13 +115,14 @@ const StudentDetails = () => {
             items = cart;
         }
 
-        const result = registerPurchase(id, finalAmount, description, items);
+        const result = registerPurchase(id, finalAmount, description, items, purchasePaymentMethod);
         if (result.success) {
             setManualAmount('');
             setManualDesc('');
             setCart([]);
             setIsPurchaseModalOpen(false);
             setSelectedCategory(null); // Reset category on successful purchase
+            setPurchasePaymentMethod('CREDITO');
         } else {
             alert(result.error);
         }
@@ -314,7 +340,7 @@ const StudentDetails = () => {
             </Modal>
 
             {/* Purchase Modal with Product Selection */}
-            <Modal isOpen={isPurchaseModalOpen} onClose={() => { setIsPurchaseModalOpen(false); setSelectedCategory(null); }} title="Registrar Compra">
+            <Modal isOpen={isPurchaseModalOpen} onClose={() => { setIsPurchaseModalOpen(false); setSelectedCategory(null); setPurchasePaymentMethod('CREDITO'); }} title="Registrar Compra">
                 <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
                     <Button
                         variant={purchaseMode === 'products' ? 'primary' : 'ghost'}
@@ -333,6 +359,45 @@ const StudentDetails = () => {
                 </div>
 
                 <form onSubmit={handlePurchase}>
+                    {/* Payment Method Selection */}
+                    <div style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
+                        <label className="input-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Forma de Pagamento</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={purchasePaymentMethod === 'CREDITO' ? 'primary' : 'outline'}
+                                onClick={() => setPurchasePaymentMethod('CREDITO')}
+                            >
+                                <Wallet size={16} style={{ marginRight: '0.5rem' }} /> Saldo/Crédito
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={purchasePaymentMethod === 'DINHEIRO' ? 'secondary' : 'outline'}
+                                onClick={() => setPurchasePaymentMethod('DINHEIRO')}
+                            >
+                                <Banknote size={16} style={{ marginRight: '0.5rem' }} /> Dinheiro
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={purchasePaymentMethod === 'PIX' ? 'secondary' : 'outline'}
+                                onClick={() => setPurchasePaymentMethod('PIX')}
+                            >
+                                <QrCode size={16} style={{ marginRight: '0.5rem' }} /> Pix
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={purchasePaymentMethod === 'CARTAO' ? 'secondary' : 'outline'}
+                                onClick={() => setPurchasePaymentMethod('CARTAO')}
+                            >
+                                <CreditCard size={16} style={{ marginRight: '0.5rem' }} /> Cartão
+                            </Button>
+                        </div>
+                    </div>
+
                     {purchaseMode === 'manual' ? (
                         <>
                             <Input

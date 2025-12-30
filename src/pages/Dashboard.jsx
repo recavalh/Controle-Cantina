@@ -8,7 +8,7 @@ import { TrendingUp, Users, DollarSign, Activity, ShoppingCart, UserPlus, Search
 import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
-    const { students, transactions, addStudent } = useCantina();
+    const { students, transactions, addStudent, currentUser } = useCantina();
     const navigate = useNavigate();
 
     const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
@@ -16,16 +16,38 @@ const Dashboard = () => {
     const [showNewStudentForm, setShowNewStudentForm] = useState(false);
     const [newStudentName, setNewStudentName] = useState('');
 
-    const totalBalance = students.reduce((acc, s) => acc + s.balance, 0);
-    // Count only active students for the main stat, or all? User just says "Alunos Ativos".
-    // Usually "Alunos Ativos" literally means active: true.
-    const activeStudentsCount = students.filter(s => s.active !== false).length;
+    // Filter Students based on Role
+    const accessibleStudents = students.filter(s => {
+        if (currentUser?.role !== 'admin') {
+            const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+            if ((s.school || 'Wizard') !== userSchool) return false;
+        }
+        return true;
+    });
 
-    const recentTransactions = transactions.slice(0, 5);
-    const totalSales = transactions.filter(t => t.type === 'PURCHASE').reduce((acc, t) => acc + t.amount, 0);
+    // Filter Transactions based on accessible students (approximate proxy for school permissions on history)
+    const accessibleTransactions = transactions.filter(t => {
+        if (currentUser?.role === 'admin') return true;
+        const student = students.find(s => s.id === t.studentId);
+        // If student exists, check school.
+        if (student) {
+            const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+            return (student.school || 'Wizard') === userSchool;
+        }
+        // If student deleted, maybe hide to be safe, or show if name implies? 
+        // For now, hiding 'orphaned' transactions from non-admins to ensure strict data separation.
+        return false;
+    });
 
-    // Filter students for sale: Only show active ones
-    const filteredStudents = students
+
+    const totalBalance = accessibleStudents.reduce((acc, s) => acc + s.balance, 0);
+    const activeStudentsCount = accessibleStudents.filter(s => s.active !== false).length;
+
+    const recentTransactions = accessibleTransactions.slice(0, 5);
+    const totalSales = accessibleTransactions.filter(t => t.type === 'PURCHASE').reduce((acc, t) => acc + t.amount, 0);
+
+    // Filter students for sale modal
+    const filteredStudentsForModal = accessibleStudents
         .filter(s => s.active !== false)
         .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -37,10 +59,15 @@ const Dashboard = () => {
     const handleQuickAddStudent = (e) => {
         e.preventDefault();
         if (newStudentName.trim()) {
-            const newStudent = addStudent(newStudentName);
+            // Determine school
+            let school = 'Wizard';
+            if (currentUser?.role === 'wizkids') school = 'WizKids';
+            // If admin, defaults to Wizard here for quick add, or we could add a selector. 
+            // For Quick Add, simplicity is key, defaulting to Wizard for Admin is acceptable or purely contextual.
+
+            const newStudent = addStudent(newStudentName, school);
             setNewStudentName('');
             setShowNewStudentForm(false);
-            // Navigate directly to the new student's page
             handleSelectStudent(newStudent.id);
         }
     };
@@ -65,7 +92,9 @@ const Dashboard = () => {
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h2 className="text-gradient-primary" style={{ margin: 0 }}>Dashboard</h2>
+                <h2 className="text-gradient-primary" style={{ margin: 0 }}>
+                    Dashboard {currentUser?.role !== 'admin' && `(${currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard'})`}
+                </h2>
                 <Button onClick={() => { setIsSaleModalOpen(true); setSearchTerm(''); setShowNewStudentForm(false); }}>
                     <ShoppingCart size={18} style={{ marginRight: '0.5rem' }} />
                     Nova Venda
@@ -87,7 +116,6 @@ const Dashboard = () => {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                         {recentTransactions.map(t => {
-                            // Try to find current student, fallback to snapshot name
                             const student = students.find(s => s.id === t.studentId);
                             const displayName = student ? student.name : (t.studentName || 'Aluno Excluído');
 
@@ -132,7 +160,7 @@ const Dashboard = () => {
                             </Button>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {filteredStudents.map(student => (
+                            {filteredStudentsForModal.map(student => (
                                 <div
                                     key={student.id}
                                     onClick={() => handleSelectStudent(student.id)}
@@ -146,7 +174,10 @@ const Dashboard = () => {
                                     }}
                                     className="hover-bg"
                                 >
-                                    <span style={{ fontWeight: 500 }}>{student.name}</span>
+                                    <div>
+                                        <span style={{ fontWeight: 500, display: 'block' }}>{student.name}</span>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{student.school || 'Wizard'}</span>
+                                    </div>
                                     <span style={{
                                         fontSize: '0.9rem',
                                         color: student.balance < 0 ? '#ef4444' : '#10b981',
@@ -156,7 +187,7 @@ const Dashboard = () => {
                                     </span>
                                 </div>
                             ))}
-                            {filteredStudents.length === 0 && (
+                            {filteredStudentsForModal.length === 0 && (
                                 <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>Nenhum aluno ativo encontrado.</p>
                             )}
                         </div>
@@ -175,6 +206,11 @@ const Dashboard = () => {
                             onChange={(e) => setNewStudentName(e.target.value)}
                             autoFocus
                         />
+                        {currentUser?.role === 'admin' && (
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                * O aluno será cadastrado na escola <strong>Wizard</strong> por padrão no acesso Rápido. Use a tela de Alunos para mais opções.
+                            </p>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                             <Button variant="ghost" type="button" onClick={() => setShowNewStudentForm(false)}>Cancelar</Button>
                             <Button type="submit">Cadastrar e Ir para Venda</Button>

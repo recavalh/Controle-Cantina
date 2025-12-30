@@ -11,6 +11,19 @@ export const useCantina = () => {
 };
 
 export const CantinaProvider = ({ children }) => {
+    const [currentUser, setCurrentUser] = useState(() => {
+        const saved = localStorage.getItem('cantina_current_user');
+        return saved ? JSON.parse(saved) : { role: 'admin' }; // 'admin', 'wizard', 'wizkids'
+    });
+
+    useEffect(() => {
+        localStorage.setItem('cantina_current_user', JSON.stringify(currentUser));
+    }, [currentUser]);
+
+    const login = (role) => {
+        setCurrentUser({ role });
+    };
+
     const [students, setStudents] = useState(() => {
         const saved = localStorage.getItem('cantina_students');
         return saved ? JSON.parse(saved) : [];
@@ -38,10 +51,11 @@ export const CantinaProvider = ({ children }) => {
         localStorage.setItem('cantina_products', JSON.stringify(products));
     }, [products]);
 
-    const addStudent = (name) => {
+    const addStudent = (name, school = 'Wizard') => {
         const newStudent = {
             id: crypto.randomUUID(),
             name,
+            school, // 'Wizard' or 'WizKids'
             balance: 0,
             active: true,
             createdAt: new Date().toISOString()
@@ -81,7 +95,7 @@ export const CantinaProvider = ({ children }) => {
         return true;
     };
 
-    const addProduct = ({ name, price, costPrice, supplier, category, initialStock = 0, minStock = 5 }) => {
+    const addProduct = ({ name, price, costPrice, supplier, category, initialStock = 0, minStock = 5, school = 'Wizard' }) => {
         const newProduct = {
             id: crypto.randomUUID(),
             name,
@@ -91,6 +105,7 @@ export const CantinaProvider = ({ children }) => {
             category: category || 'Outros',
             stock: parseInt(initialStock),
             minStock: parseInt(minStock),
+            school, // 'Wizard' or 'WizKids'
             createdAt: new Date().toISOString()
         };
         setProducts(prev => [...prev, newProduct]);
@@ -108,6 +123,19 @@ export const CantinaProvider = ({ children }) => {
             return p;
         }));
         return true;
+    };
+
+    const [settings, setSettings] = useState(() => {
+        const saved = localStorage.getItem('cantina_settings');
+        return saved ? JSON.parse(saved) : { operationalTaxRate: 15 }; // Default 15%
+    });
+
+    useEffect(() => {
+        localStorage.setItem('cantina_settings', JSON.stringify(settings));
+    }, [settings]);
+
+    const updateSettings = (newSettings) => {
+        setSettings(prev => ({ ...prev, ...newSettings }));
     };
 
     const [invoices, setInvoices] = useState(() => {
@@ -152,7 +180,7 @@ export const CantinaProvider = ({ children }) => {
         }
     };
 
-    const registerPurchase = (studentId, amount, description = 'Compra', items = []) => {
+    const registerPurchase = (studentId, amount, description = 'Purchase', items = [], paymentMethod = 'CREDITO') => {
         const numAmount = parseFloat(amount);
         if (isNaN(numAmount) || numAmount <= 0) return { success: false, error: 'Valor inválido' };
 
@@ -166,14 +194,20 @@ export const CantinaProvider = ({ children }) => {
         }
 
         let success = false;
-        setStudents(prev => prev.map(s => {
-            if (s.id === studentId) {
-                if (s.balance < numAmount) return s;
-                success = true;
-                return { ...s, balance: s.balance - numAmount };
-            }
-            return s;
-        }));
+
+        if (paymentMethod === 'CREDITO') {
+            setStudents(prev => prev.map(s => {
+                if (s.id === studentId) {
+                    if (s.balance < numAmount) return s;
+                    success = true;
+                    return { ...s, balance: s.balance - numAmount };
+                }
+                return s;
+            }));
+        } else {
+            // For other methods, we assume immediate payment, so no balance deduction, but we track it.
+            success = true;
+        }
 
         if (success) {
             // Deduct stock
@@ -197,6 +231,7 @@ export const CantinaProvider = ({ children }) => {
                 amount: numAmount,
                 description,
                 items, // Save items in transaction
+                method: paymentMethod, // Save method
                 date: new Date().toISOString()
             };
             setTransactions(prev => [transaction, ...prev]);
@@ -222,7 +257,8 @@ export const CantinaProvider = ({ children }) => {
             price: parseFloat(data.price),
             costPrice: parseFloat(data.costPrice) || p.costPrice || 0,
             stock: parseInt(data.stock),
-            minStock: parseInt(data.minStock !== undefined ? data.minStock : (p.minStock || 5))
+            minStock: parseInt(data.minStock !== undefined ? data.minStock : (p.minStock || 5)),
+            school: data.school || p.school || 'Wizard'
         } : p));
     };
 
@@ -234,16 +270,21 @@ export const CantinaProvider = ({ children }) => {
         const transaction = transactions.find(t => t.id === transactionId);
         if (!transaction) return false;
 
-        // Revert Balance
-        setStudents(prev => prev.map(s => {
-            if (s.id === transaction.studentId) {
-                const revertAmount = transaction.type === 'DEPOSIT' ? -transaction.amount : transaction.amount;
-                return { ...s, balance: s.balance + revertAmount };
-            }
-            return s;
-        }));
+        // Revert Balance - ONLY if it was a DEPOSIT or a PURCHASE via CREDIT
+        if (transaction.type === 'DEPOSIT' || (transaction.type === 'PURCHASE' && transaction.method === 'CREDITO')) {
+            setStudents(prev => prev.map(s => {
+                if (s.id === transaction.studentId) {
+                    // If DEPOSIT, we remove the amount (balance - amount)
+                    // If PURCHASE (CREDIT), we refund the amount (balance + amount)
+                    const revertAmount = transaction.type === 'DEPOSIT' ? -transaction.amount : transaction.amount;
+                    return { ...s, balance: s.balance + revertAmount };
+                }
+                return s;
+            }));
+        }
+        // NOTE: If PURCHASE via MONEY/PIX/CARD, we do NOT touch the student balance, as it wasn't deducted.
 
-        // Revert Stock if Purchase has items
+        // Revert Stock if Purchase has items (Always revert stock regardless of payment method)
         if (transaction.type === 'PURCHASE' && transaction.items && transaction.items.length > 0) {
             setProducts(prev => prev.map(p => {
                 const item = transaction.items.find(i => i.productId === p.id);
@@ -268,6 +309,9 @@ export const CantinaProvider = ({ children }) => {
             transactions,
             products,
             invoices,
+            settings,
+            currentUser,
+            login,
             addStudent,
             toggleStudentStatus,
             addFunds,
@@ -280,7 +324,8 @@ export const CantinaProvider = ({ children }) => {
             updateStudent,
             deleteStudent,
             updateProduct,
-            deleteProduct
+            deleteProduct,
+            updateSettings,
         }}>
             {children}
         </CantinaContext.Provider>

@@ -7,7 +7,7 @@ import Input from '../components/UI/Input';
 import { Plus, Package, Truck, Edit, Trash2, ShoppingBag, FileText, Search, AlertTriangle } from 'lucide-react';
 
 const Products = () => {
-    const { products, invoices, addProduct, restockProduct, updateProduct, deleteProduct, bulkRestockProducts } = useCantina();
+    const { products, invoices, addProduct, restockProduct, updateProduct, deleteProduct, bulkRestockProducts, currentUser } = useCantina();
 
     // Modal States
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -27,6 +27,7 @@ const Products = () => {
     const [stock, setStock] = useState('');
     const [minStock, setMinStock] = useState('5'); // Default min stock
     const [category, setCategory] = useState('Outros');
+    const [school, setSchool] = useState('Wizard');
 
     // Restock State
     const [restockAmount, setRestockAmount] = useState('');
@@ -42,6 +43,15 @@ const Products = () => {
     const CATEGORIES = ['Comidas', 'Bebidas', 'Doces', 'Outros'];
     const SUPPLIERS = [...new Set(products.map(p => p.supplier).filter(Boolean))]; // Unique suppliers
 
+    // Init School based on Role
+    React.useEffect(() => {
+        if (currentUser?.role === 'wizard') {
+            setSchool('Wizard');
+        } else if (currentUser?.role === 'wizkids') {
+            setSchool('WizKids');
+        }
+    }, [currentUser]);
+
     const resetForm = () => {
         setName('');
         setPrice('');
@@ -50,6 +60,7 @@ const Products = () => {
         setStock('');
         setMinStock('5');
         setCategory('Outros');
+        if (currentUser?.role === 'admin') setSchool('Wizard');
     };
 
     const handleAddProduct = (e) => {
@@ -62,7 +73,8 @@ const Products = () => {
                 supplier,
                 category,
                 initialStock: stock || 0,
-                minStock: minStock || 5
+                minStock: minStock || 5,
+                school
             });
             resetForm();
             setIsAddModalOpen(false);
@@ -78,6 +90,7 @@ const Products = () => {
         setStock(product.stock);
         setMinStock(product.minStock || 5);
         setCategory(product.category || 'Outros');
+        setSchool(product.school || 'Wizard');
         setIsEditModalOpen(true);
     };
 
@@ -91,7 +104,8 @@ const Products = () => {
                 supplier,
                 stock,
                 minStock,
-                category
+                category,
+                school
             });
             resetForm();
             setIsEditModalOpen(false);
@@ -155,9 +169,15 @@ const Products = () => {
     };
 
     // Group Products Logic
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredProducts = products
+        .filter(p => {
+            // Role Filter
+            if (currentUser?.role !== 'admin') {
+                const userSchool = currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard';
+                if ((p.school || 'Wizard') !== userSchool) return false;
+            }
+            return p.name.toLowerCase().includes(searchTerm.toLowerCase());
+        });
 
     const productsByCategory = CATEGORIES.reduce((acc, cat) => {
         acc[cat] = filteredProducts.filter(p => {
@@ -175,7 +195,9 @@ const Products = () => {
             </datalist>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
-                <h2 className="text-gradient-primary" style={{ fontSize: '2rem', margin: 0 }}>Produtos & Estoque</h2>
+                <h2 className="text-gradient-primary" style={{ fontSize: '2rem', margin: 0 }}>
+                    Produtos {currentUser?.role !== 'admin' && `(${currentUser?.role === 'wizkids' ? 'WizKids' : 'Wizard'})`}
+                </h2>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <Button variant="ghost" onClick={() => setIsInvoicesModalOpen(true)}>
                         <FileText size={18} style={{ marginRight: '0.5rem' }} />
@@ -261,9 +283,22 @@ const Products = () => {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', marginTop: '1rem' }}>
                                                 <div>
                                                     <h3 style={{ margin: 0 }}>{product.name}</h3>
-                                                    <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                                        {product.category || 'Outros'} • {product.supplier || 'Fornecedor n/a'}
-                                                    </p>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
+                                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                                            {product.category || 'Outros'} • {product.supplier || 'Fornecedor n/a'}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '0.7rem',
+                                                            width: 'fit-content',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            background: (product.school || 'Wizard') === 'Wizard' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                                            color: (product.school || 'Wizard') === 'Wizard' ? '#fca5a5' : '#93c5fd',
+                                                            border: `1px solid ${(product.school || 'Wizard') === 'Wizard' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`
+                                                        }}>
+                                                            {product.school || 'Wizard'}
+                                                        </span>
+                                                    </div>
                                                     {product.costPrice > 0 && (
                                                         <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                                                             Custo: R$ {product.costPrice.toFixed(2)}
@@ -298,7 +333,7 @@ const Products = () => {
 
                 {filteredProducts.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-                        <p>Nenhum produto cadastrado ou encontrado.</p>
+                        <p>Nenhum produto cadastrado ou encontrado para esta escola.</p>
                     </div>
                 )}
             </div>
@@ -329,6 +364,31 @@ const Products = () => {
                             onChange={(e) => setCostPrice(e.target.value)}
                         />
                     </div>
+
+                    {currentUser?.role === 'admin' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Escola</label>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <Button
+                                    type="button"
+                                    variant={school === 'Wizard' ? 'secondary' : 'outline'}
+                                    onClick={() => setSchool('Wizard')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: school === 'Wizard' ? '#ef4444' : undefined, color: school === 'Wizard' ? '#fca5a5' : undefined }}
+                                >
+                                    Wizard
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={school === 'WizKids' ? 'secondary' : 'outline'}
+                                    onClick={() => setSchool('WizKids')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: school === 'WizKids' ? '#3b82f6' : undefined, color: school === 'WizKids' ? '#93c5fd' : undefined }}
+                                >
+                                    WizKids
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <Input
                             label="Estoque Inicial"
@@ -406,6 +466,31 @@ const Products = () => {
                             onChange={(e) => setCostPrice(e.target.value)}
                         />
                     </div>
+
+                    {currentUser?.role === 'admin' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Escola</label>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <Button
+                                    type="button"
+                                    variant={school === 'Wizard' ? 'secondary' : 'outline'}
+                                    onClick={() => setSchool('Wizard')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: school === 'Wizard' ? '#ef4444' : undefined, color: school === 'Wizard' ? '#fca5a5' : undefined }}
+                                >
+                                    Wizard
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={school === 'WizKids' ? 'secondary' : 'outline'}
+                                    onClick={() => setSchool('WizKids')}
+                                    style={{ flex: 1, justifyContent: 'center', borderColor: school === 'WizKids' ? '#3b82f6' : undefined, color: school === 'WizKids' ? '#93c5fd' : undefined }}
+                                >
+                                    WizKids
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <Input
                             label="Estoque"

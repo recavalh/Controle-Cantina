@@ -7,6 +7,8 @@ import Students from './pages/Students';
 import StudentDetails from './pages/StudentDetails';
 import Products from './pages/Products';
 import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import Login from './pages/Login';
 
 function App() {
   return (
@@ -19,7 +21,9 @@ function App() {
             <Route path="students/:id" element={<StudentDetails />} />
             <Route path="products" element={<Products />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
+          <Route path="/login" element={<Login />} />
         </Routes>
       </BrowserRouter>
     </CantinaProvider>
