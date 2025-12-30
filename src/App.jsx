@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
 import StudentDetails from './pages/StudentDetails';
 import Products from './pages/Products';
+import Reports from './pages/Reports';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
             <Route path="students" element={<Students />} />
             <Route path="students/:id" element={<StudentDetails />} />
             <Route path="products" element={<Products />} />
+            <Route path="reports" element={<Reports />} />
           </Route>
         </Routes>
       </BrowserRouter>

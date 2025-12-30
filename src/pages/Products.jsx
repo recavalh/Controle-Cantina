@@ -4,16 +4,17 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Modal from '../components/UI/Modal';
 import Input from '../components/UI/Input';
-import { Plus, Package, Truck, Edit, Trash2, ShoppingBag } from 'lucide-react';
+import { Plus, Package, Truck, Edit, Trash2, ShoppingBag, FileText, Search, AlertTriangle } from 'lucide-react';
 
 const Products = () => {
-    const { products, addProduct, restockProduct, updateProduct, deleteProduct, bulkRestockProducts } = useCantina();
+    const { products, invoices, addProduct, restockProduct, updateProduct, deleteProduct, bulkRestockProducts } = useCantina();
 
     // Modal States
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isBulkRestockModalOpen, setIsBulkRestockModalOpen] = useState(false);
+    const [isInvoicesModalOpen, setIsInvoicesModalOpen] = useState(false);
 
     // Selection State
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -24,6 +25,7 @@ const Products = () => {
     const [costPrice, setCostPrice] = useState('');
     const [supplier, setSupplier] = useState('');
     const [stock, setStock] = useState('');
+    const [minStock, setMinStock] = useState('5'); // Default min stock
     const [category, setCategory] = useState('Outros');
 
     // Restock State
@@ -32,8 +34,13 @@ const Products = () => {
     // Bulk Restock State
     const [bulkCategory, setBulkCategory] = useState(''); // 'Comidas' or 'Bebidas'
     const [bulkItems, setBulkItems] = useState({}); // { productId: quantity }
+    const [bulkSupplier, setBulkSupplier] = useState('');
+    const [bulkInvoiceNumber, setBulkInvoiceNumber] = useState('');
+
+    const [searchTerm, setSearchTerm] = useState('');
 
     const CATEGORIES = ['Comidas', 'Bebidas', 'Doces', 'Outros'];
+    const SUPPLIERS = [...new Set(products.map(p => p.supplier).filter(Boolean))]; // Unique suppliers
 
     const resetForm = () => {
         setName('');
@@ -41,13 +48,22 @@ const Products = () => {
         setCostPrice('');
         setSupplier('');
         setStock('');
+        setMinStock('5');
         setCategory('Outros');
     };
 
     const handleAddProduct = (e) => {
         e.preventDefault();
         if (name && price) {
-            addProduct({ name, price, costPrice, supplier, category, initialStock: stock || 0 });
+            addProduct({
+                name,
+                price,
+                costPrice,
+                supplier,
+                category,
+                initialStock: stock || 0,
+                minStock: minStock || 5
+            });
             resetForm();
             setIsAddModalOpen(false);
         }
@@ -60,6 +76,7 @@ const Products = () => {
         setCostPrice(product.costPrice || '');
         setSupplier(product.supplier || '');
         setStock(product.stock);
+        setMinStock(product.minStock || 5);
         setCategory(product.category || 'Outros');
         setIsEditModalOpen(true);
     };
@@ -67,7 +84,15 @@ const Products = () => {
     const handleEditProduct = (e) => {
         e.preventDefault();
         if (selectedProduct && name && price) {
-            updateProduct(selectedProduct.id, { name, price, costPrice, supplier, stock, category });
+            updateProduct(selectedProduct.id, {
+                name,
+                price,
+                costPrice,
+                supplier,
+                stock,
+                minStock,
+                category
+            });
             resetForm();
             setIsEditModalOpen(false);
             setSelectedProduct(null);
@@ -117,18 +142,45 @@ const Products = () => {
             .map(([id, qty]) => ({ id, quantity: parseInt(qty) }));
 
         if (itemsToUpdate.length > 0) {
-            bulkRestockProducts(itemsToUpdate);
+            bulkRestockProducts(itemsToUpdate, {
+                supplier: bulkSupplier || 'Não informado',
+                invoiceNumber: bulkInvoiceNumber || 'S/N'
+            });
             setIsBulkRestockModalOpen(false);
             setBulkCategory('');
             setBulkItems({});
+            setBulkSupplier('');
+            setBulkInvoiceNumber('');
         }
     };
 
+    // Group Products Logic
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const productsByCategory = CATEGORIES.reduce((acc, cat) => {
+        acc[cat] = filteredProducts.filter(p => {
+            const prodCat = p.category || 'Outros';
+            return prodCat === cat || (cat === 'Outros' && !CATEGORIES.includes(prodCat));
+        });
+        return acc;
+    }, {});
+
+
     return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h2 className="text-gradient-primary" style={{ fontSize: '2rem' }}>Produtos & Estoque</h2>
+        <div style={{ height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
+            <datalist id="suppliers">
+                {SUPPLIERS.map(s => <option key={s} value={s} />)}
+            </datalist>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
+                <h2 className="text-gradient-primary" style={{ fontSize: '2rem', margin: 0 }}>Produtos & Estoque</h2>
                 <div style={{ display: 'flex', gap: '1rem' }}>
+                    <Button variant="ghost" onClick={() => setIsInvoicesModalOpen(true)}>
+                        <FileText size={18} style={{ marginRight: '0.5rem' }} />
+                        Notas
+                    </Button>
                     <Button variant="secondary" onClick={() => { setBulkCategory(''); setBulkItems({}); setIsBulkRestockModalOpen(true); }}>
                         <ShoppingBag size={18} style={{ marginRight: '0.5rem' }} />
                         Compra Fornecedor
@@ -140,75 +192,113 @@ const Products = () => {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                {products.map(product => {
-                    const isLowStock = product.stock < 5;
-                    const isOutOfStock = product.stock === 0;
+            <div style={{ marginBottom: '1.5rem', flexShrink: 0 }}>
+                <Input
+                    placeholder="Buscar produto..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    icon={Search}
+                    style={{ marginBottom: 0 }}
+                />
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+                {CATEGORIES.map(category => {
+                    const catProducts = productsByCategory[category];
+                    if (catProducts.length === 0) return null;
+
                     return (
-                        <Card key={product.id} style={{ position: 'relative', overflow: 'hidden' }}>
-                            {isLowStock && (
-                                <div style={{
-                                    position: 'absolute', top: 0, right: 0,
-                                    background: isOutOfStock ? '#ef4444' : '#f59e0b',
-                                    padding: '4px 12px',
-                                    borderBottomLeftRadius: '12px',
-                                    fontSize: '0.75rem', fontWeight: 'bold'
-                                }}>
-                                    {isOutOfStock ? 'SEM ESTOQUE' : 'BAIXO ESTOQUE'}
-                                </div>
-                            )}
+                        <div key={category}>
+                            <h3 style={{
+                                borderBottom: '1px solid var(--glass-border)',
+                                paddingBottom: '0.5rem',
+                                marginBottom: '1rem',
+                                color: 'var(--text-muted)',
+                                fontSize: '1.2rem',
+                                fontWeight: 500
+                            }}>
+                                {category}
+                            </h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                                {catProducts.map(product => {
+                                    const threshold = product.minStock || 5;
+                                    const isLowStock = product.stock <= threshold;
+                                    const isOutOfStock = product.stock === 0;
 
-                            {/* Edit Button overlay */}
-                            <button
-                                onClick={() => openEdit(product)}
-                                style={{
-                                    position: 'absolute', top: '10px', left: '10px',
-                                    background: 'rgba(255, 255, 255, 0.1)', border: 'none',
-                                    borderRadius: '50%', width: '30px', height: '30px',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    cursor: 'pointer', color: 'var(--text-main)'
-                                }}
-                            >
-                                <Edit size={14} />
-                            </button>
+                                    return (
+                                        <Card key={product.id} style={{ position: 'relative', overflow: 'hidden' }}>
+                                            {isLowStock && (
+                                                <div style={{
+                                                    position: 'absolute', top: 0, right: 0,
+                                                    background: isOutOfStock ? '#ef4444' : '#f59e0b',
+                                                    padding: '4px 12px',
+                                                    borderBottomLeftRadius: '12px',
+                                                    fontSize: '0.75rem', fontWeight: 'bold',
+                                                    display: 'flex', alignItems: 'center', gap: '4px'
+                                                }}>
+                                                    {isOutOfStock ? (
+                                                        <>SEM ESTOQUE</>
+                                                    ) : (
+                                                        <><AlertTriangle size={12} /> BAIXO: {product.stock}/{threshold}</>
+                                                    )}
+                                                </div>
+                                            )}
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', marginTop: '1rem' }}>
-                                <div>
-                                    <h3 style={{ margin: 0 }}>{product.name}</h3>
-                                    <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                        {product.category || 'Outros'} • {product.supplier || 'Fornecedor n/a'}
-                                    </p>
-                                    {product.costPrice > 0 && (
-                                        <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                                            Custo: R$ {product.costPrice.toFixed(2)}
-                                        </p>
-                                    )}
-                                </div>
-                                <div style={{
-                                    background: 'rgba(255,255,255,0.05)',
-                                    padding: '8px', borderRadius: '8px',
-                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                }}>
-                                    <Package size={20} className="text-gradient-secondary" />
-                                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{product.stock}</span>
-                                </div>
+                                            {/* Edit Button overlay */}
+                                            <button
+                                                onClick={() => openEdit(product)}
+                                                style={{
+                                                    position: 'absolute', top: '10px', left: '10px',
+                                                    background: 'rgba(255, 255, 255, 0.1)', border: 'none',
+                                                    borderRadius: '50%', width: '30px', height: '30px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    cursor: 'pointer', color: 'var(--text-main)'
+                                                }}
+                                            >
+                                                <Edit size={14} />
+                                            </button>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', marginTop: '1rem' }}>
+                                                <div>
+                                                    <h3 style={{ margin: 0 }}>{product.name}</h3>
+                                                    <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                                        {product.category || 'Outros'} • {product.supplier || 'Fornecedor n/a'}
+                                                    </p>
+                                                    {product.costPrice > 0 && (
+                                                        <p style={{ margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                                            Custo: R$ {product.costPrice.toFixed(2)}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div style={{
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                    padding: '8px', borderRadius: '8px',
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                                }}>
+                                                    <Package size={20} className="text-gradient-secondary" />
+                                                    <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{product.stock}</span>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem' }}>
+                                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>
+                                                    R$ {product.price.toFixed(2)}
+                                                </span>
+                                                <Button variant="ghost" onClick={() => openRestock(product)} style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>
+                                                    <Truck size={16} style={{ marginRight: '0.5rem' }} /> Repor
+                                                </Button>
+                                            </div>
+                                        </Card>
+                                    );
+                                })}
                             </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem' }}>
-                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>
-                                    R$ {product.price.toFixed(2)}
-                                </span>
-                                <Button variant="ghost" onClick={() => openRestock(product)} style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>
-                                    <Truck size={16} style={{ marginRight: '0.5rem' }} /> Repor
-                                </Button>
-                            </div>
-                        </Card>
+                        </div>
                     );
                 })}
 
-                {products.length === 0 && (
-                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-                        <p>Nenhum produto cadastrado.</p>
+                {filteredProducts.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                        <p>Nenhum produto cadastrado ou encontrado.</p>
                     </div>
                 )}
             </div>
@@ -246,32 +336,44 @@ const Products = () => {
                             value={stock}
                             onChange={(e) => setStock(e.target.value)}
                         />
-                        <div style={{ marginBottom: '1rem' }}>
-                            <label className="input-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Categoria</label>
-                            <select
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.75rem',
-                                    background: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid var(--glass-border)',
-                                    borderRadius: '12px',
-                                    color: 'var(--text-main)',
-                                    fontSize: '1rem'
-                                }}
-                            >
-                                {CATEGORIES.map(cat => <option key={cat} value={cat} style={{ background: '#333' }}>{cat}</option>)}
-                            </select>
-                        </div>
+                        <Input
+                            label="Alerta de Estoque Mínimo"
+                            type="number" step="1" min="0"
+                            value={minStock}
+                            onChange={(e) => setMinStock(e.target.value)}
+                        />
                     </div>
 
-                    <Input
-                        label="Fornecedor"
-                        placeholder="Ex: Coca-Cola Dist."
-                        value={supplier}
-                        onChange={(e) => setSupplier(e.target.value)}
-                    />
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="input-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Categoria</label>
+                        <select
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '0.75rem',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: '12px',
+                                color: 'var(--text-main)',
+                                fontSize: '1rem'
+                            }}
+                        >
+                            {CATEGORIES.map(cat => <option key={cat} value={cat} style={{ background: '#333' }}>{cat}</option>)}
+                        </select>
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="input-label">Fornecedor</label>
+                        <input
+                            list="suppliers"
+                            className="glass-input"
+                            value={supplier}
+                            onChange={(e) => setSupplier(e.target.value)}
+                            placeholder="Ex: Coca-Cola Dist."
+                        />
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                         <Button variant="ghost" type="button" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
                         <Button type="submit">Cadastrar</Button>
@@ -311,30 +413,40 @@ const Products = () => {
                             value={stock}
                             onChange={(e) => setStock(e.target.value)}
                         />
-                        <div style={{ marginBottom: '1rem' }}>
-                            <label className="input-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Categoria</label>
-                            <select
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.75rem',
-                                    background: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid var(--glass-border)',
-                                    borderRadius: '12px',
-                                    color: 'var(--text-main)',
-                                    fontSize: '1rem'
-                                }}
-                            >
-                                {CATEGORIES.map(cat => <option key={cat} value={cat} style={{ background: '#333' }}>{cat}</option>)}
-                            </select>
-                        </div>
+                        <Input
+                            label="Alerta de Estoque Mínimo"
+                            type="number" step="1" min="0"
+                            value={minStock}
+                            onChange={(e) => setMinStock(e.target.value)}
+                        />
                     </div>
-                    <Input
-                        label="Fornecedor"
-                        value={supplier}
-                        onChange={(e) => setSupplier(e.target.value)}
-                    />
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="input-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Categoria</label>
+                        <select
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '0.75rem',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: '12px',
+                                color: 'var(--text-main)',
+                                fontSize: '1rem'
+                            }}
+                        >
+                            {CATEGORIES.map(cat => <option key={cat} value={cat} style={{ background: '#333' }}>{cat}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="input-label">Fornecedor</label>
+                        <input
+                            list="suppliers"
+                            className="glass-input"
+                            value={supplier}
+                            onChange={(e) => setSupplier(e.target.value)}
+                        />
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem' }}>
                         <Button type="button" variant="ghost" style={{ color: '#ef4444' }} onClick={handleDeleteProduct}>
                             <Trash2 size={16} style={{ marginRight: '0.5rem' }} />
@@ -389,6 +501,27 @@ const Products = () => {
                     </div>
                 ) : (
                     <form onSubmit={handleBulkSubmit}>
+                        {/* Invoice Metadata Inputs */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px' }}>
+                            <div style={{ marginBottom: 0 }}>
+                                <label className="input-label">Fornecedor</label>
+                                <input
+                                    list="suppliers"
+                                    className="glass-input"
+                                    value={bulkSupplier}
+                                    onChange={(e) => setBulkSupplier(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                            <Input
+                                label="Nº da Nota Fiscal"
+                                placeholder="12345"
+                                value={bulkInvoiceNumber}
+                                onChange={(e) => setBulkInvoiceNumber(e.target.value)}
+                                style={{ marginBottom: 0 }}
+                            />
+                        </div>
+
                         <div style={{ marginBottom: '1rem' }}>
                             <Button variant="ghost" size="sm" onClick={() => setBulkCategory('')} style={{ paddingLeft: 0 }}>
                                 ← Voltar para categorias
@@ -396,7 +529,7 @@ const Products = () => {
                             <h3 className="text-gradient-primary" style={{ marginTop: '0.5rem' }}>Entrada: {bulkCategory}</h3>
                         </div>
 
-                        <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                             {products.filter(p => (p.category || 'Outros') === bulkCategory).map(product => (
                                 <div key={product.id} style={{
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -430,6 +563,38 @@ const Products = () => {
                         </div>
                     </form>
                 )}
+            </Modal>
+
+            {/* Invoices List Modal */}
+            <Modal isOpen={isInvoicesModalOpen} onClose={() => setIsInvoicesModalOpen(false)} title="Notas de Entrada Importadas">
+                <div style={{ maxHeight: '500px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {invoices.length > 0 ? invoices.map(inv => (
+                        <Card key={inv.id} style={{ padding: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Nota #{inv.number}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>{new Date(inv.date).toLocaleDateString()}</span>
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                Fornecedor: <strong style={{ color: 'white' }}>{inv.supplier}</strong>
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '0.5rem' }}>
+                                {inv.items.map((item, idx) => (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                                        <span>{item.productName}</span>
+                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>+{item.quantity}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    )) : (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                            Nenhuma nota lançada.
+                        </div>
+                    )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                    <Button onClick={() => setIsInvoicesModalOpen(false)}>Fechar</Button>
+                </div>
             </Modal>
         </div>
     );

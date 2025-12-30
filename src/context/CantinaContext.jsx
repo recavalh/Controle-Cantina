@@ -43,15 +43,23 @@ export const CantinaProvider = ({ children }) => {
             id: crypto.randomUUID(),
             name,
             balance: 0,
+            active: true,
             createdAt: new Date().toISOString()
         };
         setStudents(prev => [...prev, newStudent]);
         return newStudent;
     };
 
-    const addFunds = (studentId, amount) => {
+    const toggleStudentStatus = (id) => {
+        setStudents(prev => prev.map(s => s.id === id ? { ...s, active: !s.active } : s));
+    };
+
+    const addFunds = (studentId, amount, method = 'DINHEIRO') => {
         const numAmount = parseFloat(amount);
         if (isNaN(numAmount) || numAmount <= 0) return false;
+
+        const student = students.find(s => s.id === studentId);
+        if (!student) return false;
 
         setStudents(prev => prev.map(s => {
             if (s.id === studentId) {
@@ -63,15 +71,17 @@ export const CantinaProvider = ({ children }) => {
         const transaction = {
             id: crypto.randomUUID(),
             studentId,
+            studentName: student.name, // Snapshot name
             type: 'DEPOSIT',
             amount: numAmount,
+            method, // 'DINHEIRO', 'CARTAO', 'PIX'
             date: new Date().toISOString()
         };
         setTransactions(prev => [transaction, ...prev]);
         return true;
     };
 
-    const addProduct = ({ name, price, costPrice, supplier, category, initialStock = 0 }) => {
+    const addProduct = ({ name, price, costPrice, supplier, category, initialStock = 0, minStock = 5 }) => {
         const newProduct = {
             id: crypto.randomUUID(),
             name,
@@ -80,6 +90,7 @@ export const CantinaProvider = ({ children }) => {
             supplier,
             category: category || 'Outros',
             stock: parseInt(initialStock),
+            minStock: parseInt(minStock),
             createdAt: new Date().toISOString()
         };
         setProducts(prev => [...prev, newProduct]);
@@ -99,8 +110,18 @@ export const CantinaProvider = ({ children }) => {
         return true;
     };
 
-    const bulkRestockProducts = (items) => {
+    const [invoices, setInvoices] = useState(() => {
+        const saved = localStorage.getItem('cantina_invoices');
+        return saved ? JSON.parse(saved) : [];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('cantina_invoices', JSON.stringify(invoices));
+    }, [invoices]);
+
+    const bulkRestockProducts = (items, invoiceData) => {
         // items: [{ id, quantity }]
+        // invoiceData: { supplier, invoiceNumber }
         setProducts(prev => prev.map(p => {
             const item = items.find(i => i.id === p.id);
             if (item) {
@@ -111,6 +132,24 @@ export const CantinaProvider = ({ children }) => {
             }
             return p;
         }));
+
+        if (invoiceData) {
+            const newInvoice = {
+                id: crypto.randomUUID(),
+                supplier: invoiceData.supplier,
+                number: invoiceData.invoiceNumber,
+                date: new Date().toISOString(),
+                items: items.map(i => {
+                    const product = products.find(p => p.id === i.id);
+                    return {
+                        productId: i.id,
+                        quantity: i.quantity,
+                        productName: product ? product.name : 'Desconhecido'
+                    };
+                })
+            };
+            setInvoices(prev => [newInvoice, ...prev]);
+        }
     };
 
     const registerPurchase = (studentId, amount, description = 'Compra', items = []) => {
@@ -148,9 +187,12 @@ export const CantinaProvider = ({ children }) => {
                 }));
             }
 
+            const student = students.find(s => s.id === studentId); // Get student for name snapshot
+
             const transaction = {
                 id: crypto.randomUUID(),
                 studentId,
+                studentName: student ? student.name : 'Desconhecido', // Snapshot name
                 type: 'PURCHASE',
                 amount: numAmount,
                 description,
@@ -179,7 +221,8 @@ export const CantinaProvider = ({ children }) => {
             ...data,
             price: parseFloat(data.price),
             costPrice: parseFloat(data.costPrice) || p.costPrice || 0,
-            stock: parseInt(data.stock)
+            stock: parseInt(data.stock),
+            minStock: parseInt(data.minStock !== undefined ? data.minStock : (p.minStock || 5))
         } : p));
     };
 
@@ -187,14 +230,50 @@ export const CantinaProvider = ({ children }) => {
         setProducts(prev => prev.filter(p => p.id !== id));
     };
 
+    const deleteTransaction = (transactionId) => {
+        const transaction = transactions.find(t => t.id === transactionId);
+        if (!transaction) return false;
+
+        // Revert Balance
+        setStudents(prev => prev.map(s => {
+            if (s.id === transaction.studentId) {
+                const revertAmount = transaction.type === 'DEPOSIT' ? -transaction.amount : transaction.amount;
+                return { ...s, balance: s.balance + revertAmount };
+            }
+            return s;
+        }));
+
+        // Revert Stock if Purchase has items
+        if (transaction.type === 'PURCHASE' && transaction.items && transaction.items.length > 0) {
+            setProducts(prev => prev.map(p => {
+                const item = transaction.items.find(i => i.productId === p.id);
+                if (item) {
+                    return { ...p, stock: p.stock + item.quantity };
+                }
+                return p;
+            }));
+        }
+
+        setTransactions(prev => prev.filter(t => t.id !== transactionId));
+        return true;
+    };
+
+    const updateTransaction = (id, newDescription) => {
+        setTransactions(prev => prev.map(t => t.id === id ? { ...t, description: newDescription } : t));
+    };
+
     return (
         <CantinaContext.Provider value={{
             students,
             transactions,
             products,
+            invoices,
             addStudent,
+            toggleStudentStatus,
             addFunds,
             registerPurchase,
+            deleteTransaction,
+            updateTransaction,
             addProduct,
             restockProduct,
             bulkRestockProducts,

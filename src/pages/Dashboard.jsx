@@ -17,11 +17,17 @@ const Dashboard = () => {
     const [newStudentName, setNewStudentName] = useState('');
 
     const totalBalance = students.reduce((acc, s) => acc + s.balance, 0);
-    const totalStudents = students.length;
+    // Count only active students for the main stat, or all? User just says "Alunos Ativos".
+    // Usually "Alunos Ativos" literally means active: true.
+    const activeStudentsCount = students.filter(s => s.active !== false).length;
+
     const recentTransactions = transactions.slice(0, 5);
     const totalSales = transactions.filter(t => t.type === 'PURCHASE').reduce((acc, t) => acc + t.amount, 0);
 
-    const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    // Filter students for sale: Only show active ones
+    const filteredStudents = students
+        .filter(s => s.active !== false)
+        .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const handleSelectStudent = (id) => {
         setIsSaleModalOpen(false);
@@ -69,7 +75,7 @@ const Dashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <StatCard title="Total em Caixa (Saldos)" value={`R$ ${totalBalance.toFixed(2)}`} icon={DollarSign} color="99, 102, 241" />
                 <StatCard title="Total Vendas" value={`R$ ${totalSales.toFixed(2)}`} icon={TrendingUp} color="236, 72, 153" />
-                <StatCard title="Alunos Ativos" value={totalStudents} icon={Users} color="16, 185, 129" />
+                <StatCard title="Alunos Ativos" value={activeStudentsCount} icon={Users} color="16, 185, 129" />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -79,9 +85,12 @@ const Dashboard = () => {
                             <Activity size={20} className="text-gradient-secondary" /> Atividade Recente
                         </h3>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                         {recentTransactions.map(t => {
+                            // Try to find current student, fallback to snapshot name
                             const student = students.find(s => s.id === t.studentId);
+                            const displayName = student ? student.name : (t.studentName || 'Aluno Excluído');
+
                             return (
                                 <div key={t.id} style={{
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -89,7 +98,7 @@ const Dashboard = () => {
                                 }}>
                                     <div>
                                         <span style={{ fontWeight: 500, display: 'block' }}>
-                                            {t.type === 'PURCHASE' ? 'Venda' : 'Depósito'} - {student?.name || 'Desconhecido'}
+                                            {t.type === 'PURCHASE' ? 'Venda' : 'Depósito'} - {displayName}
                                         </span>
                                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                             {new Date(t.date).toLocaleTimeString()} - {t.description || 'Saldo adicionado'}
@@ -148,7 +157,7 @@ const Dashboard = () => {
                                 </div>
                             ))}
                             {filteredStudents.length === 0 && (
-                                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>Nenhum aluno encontrado.</p>
+                                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>Nenhum aluno ativo encontrado.</p>
                             )}
                         </div>
                     </>

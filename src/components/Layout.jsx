@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Coffee, Package } from 'lucide-react';
+import { LayoutDashboard, Users, Coffee, Package, BarChart3 } from 'lucide-react';
 import './Layout.css';
 
 const Layout = () => {
@@ -27,6 +27,10 @@ const Layout = () => {
                     <Link to="/products" className={`nav-link ${isActive('/products')}`}>
                         <Package size={20} /> {/* Assuming Package is imported from lucide-react */}
                         <span>Produtos</span>
+                    </Link>
+                    <Link to="/reports" className={`nav-link ${isActive('/reports')}`}>
+                        <BarChart3 size={20} />
+                        <span>Relatórios</span>
                     </Link>
                 </nav>
             </header>
