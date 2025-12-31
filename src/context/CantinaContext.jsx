@@ -16,11 +16,20 @@ export const CantinaProvider = ({ children }) => {
     // Auth State (Local Session)
     const [currentUser, setCurrentUser] = useState(() => {
         const saved = localStorage.getItem('cantina_current_user');
-        return saved ? JSON.parse(saved) : null;
+        if (!saved || saved === 'null' || saved === 'undefined') return null;
+        try {
+            return JSON.parse(saved);
+        } catch (e) {
+            return null;
+        }
     });
 
     useEffect(() => {
-        localStorage.setItem('cantina_current_user', JSON.stringify(currentUser));
+        if (currentUser) {
+            localStorage.setItem('cantina_current_user', JSON.stringify(currentUser));
+        } else {
+            localStorage.removeItem('cantina_current_user');
+        }
     }, [currentUser]);
 
     const login = (role) => {
@@ -29,7 +38,6 @@ export const CantinaProvider = ({ children }) => {
 
     const logout = () => {
         setCurrentUser(null);
-        localStorage.removeItem('cantina_current_user');
     };
 
     // Data State (Firestore)
