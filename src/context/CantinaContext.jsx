@@ -27,6 +27,11 @@ export const CantinaProvider = ({ children }) => {
         setCurrentUser({ role });
     };
 
+    const logout = () => {
+        setCurrentUser(null);
+        localStorage.removeItem('cantina_current_user');
+    };
+
     // Data State (Firestore)
     const [students, setStudents] = useState([]);
     const [transactions, setTransactions] = useState([]);
@@ -323,6 +328,7 @@ export const CantinaProvider = ({ children }) => {
             settings,
             currentUser,
             login,
+            logout,
             addStudent,
             toggleStudentStatus,
             addFunds,

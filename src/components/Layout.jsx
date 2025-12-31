@@ -5,7 +5,7 @@ import { LayoutDashboard, Users, Coffee, Package, BarChart3, Settings as Setting
 import './Layout.css';
 
 const Layout = () => {
-    const { currentUser } = useCantina();
+    const { currentUser, logout } = useCantina();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -18,6 +18,11 @@ const Layout = () => {
     }, [currentUser, navigate]);
 
     if (!currentUser) return null;
+
+    const handleLogout = (e) => {
+        e.preventDefault();
+        logout();
+    };
 
     return (
         <div className="layout">
@@ -52,10 +57,26 @@ const Layout = () => {
                         <SettingsIcon size={20} />
                         <span>Ajustes</span>
                     </Link>
-                    <Link to="/login" className="nav-link" style={{ color: '#ef4444', marginLeft: '1rem', borderLeft: '1px solid var(--glass-border)', paddingLeft: '1.5rem' }}>
+                    <button
+                        onClick={handleLogout}
+                        className="nav-link"
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#ef4444',
+                            marginLeft: '1rem',
+                            borderLeft: '1px solid var(--glass-border)',
+                            paddingLeft: '1.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            font: 'inherit'
+                        }}
+                    >
                         <LogIn size={20} />
                         <span>Sair</span>
-                    </Link>
+                    </button>
                 </nav>
             </header>
             <main className="content">
