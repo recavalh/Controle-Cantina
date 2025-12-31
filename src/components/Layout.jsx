@@ -1,5 +1,5 @@
-import React from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCantina } from '../context/CantinaContext';
 import { LayoutDashboard, Users, Coffee, Package, BarChart3, Settings as SettingsIcon, LogIn } from 'lucide-react';
 import './Layout.css';
@@ -7,8 +7,17 @@ import './Layout.css';
 const Layout = () => {
     const { currentUser } = useCantina();
     const location = useLocation();
+    const navigate = useNavigate();
 
     const isActive = (path) => location.pathname === path ? 'active' : '';
+
+    useEffect(() => {
+        if (!currentUser) {
+            navigate('/login');
+        }
+    }, [currentUser, navigate]);
+
+    if (!currentUser) return null;
 
     return (
         <div className="layout">
