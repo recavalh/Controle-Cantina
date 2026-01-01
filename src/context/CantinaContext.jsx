@@ -15,28 +15,25 @@ export const useCantina = () => {
 export const CantinaProvider = ({ children }) => {
     // Auth State (Local Session)
     const [currentUser, setCurrentUser] = useState(() => {
-        const saved = localStorage.getItem('cantina_current_user');
-        if (!saved || saved === 'null' || saved === 'undefined') return null;
         try {
-            return JSON.parse(saved);
+            const saved = localStorage.getItem('cantina_current_user');
+            if (saved && saved !== 'null' && saved !== 'undefined') {
+                return JSON.parse(saved);
+            }
         } catch (e) {
-            return null;
+            console.error("Erro ao carregar usuário:", e);
         }
+        return null;
     });
 
-    useEffect(() => {
-        if (currentUser) {
-            localStorage.setItem('cantina_current_user', JSON.stringify(currentUser));
-        } else {
-            localStorage.removeItem('cantina_current_user');
-        }
-    }, [currentUser]);
-
     const login = (role) => {
-        setCurrentUser({ role });
+        const user = { role };
+        setCurrentUser(user);
+        localStorage.setItem('cantina_current_user', JSON.stringify(user));
     };
 
     const logout = () => {
+        localStorage.removeItem('cantina_current_user');
         setCurrentUser(null);
     };
 
